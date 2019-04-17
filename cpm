@@ -5,6 +5,7 @@ tools=(
 	cgcreate
 	cgexec
 	cgset
+	cgdelete
 	grep
 	awk
 	dd
