@@ -1,0 +1,104 @@
+#!/bin/bash
+
+tools=(
+
+	cgcreate
+	cgexec
+	cgset
+	grep
+	awk
+	dd
+	sha1sum
+
+)
+
+function cleanCGroup {
+
+	cgdelete memory:$rand_string &> /dev/null
+	exit 7
+
+}
+
+trap cleanCGroup 1 2 3 15
+
+function setCGroupAndRun {
+
+	_mem="$1"
+	echo $_mem | grep -E '^[[:digit:]]{1,}$' &> /dev/null
+	if [ $? -ne 0 ]; then
+		echo "$_mem is not integer !!!"
+		exit 3
+	fi
+
+	cgcreate -g memory:/$rand_string &> /dev/null
+	if [ $? -ne 0 ]; then
+		echo "User not allowed to create CGROUP !!!"
+		exit 6
+	fi
+	cgset -r memory.limit_in_bytes=${_mem}M $rand_string
+	cgset -r memory.memsw.limit_in_bytes=10M $rand_string
+
+	cgexec -g memory:$rand_string ${allargs[@]} 
+	cgdelete memory:$rand_string &> /dev/null
+
+}
+
+function checkTools {
+
+	for tool in ${tools[@]}
+	do
+		which $tool &> /dev/null
+		if [ $? -ne 0 ]; then
+			echo "Tool: $tool is missing !!!"
+			exit 1
+		fi
+	done
+
+}
+
+function printHelp {
+
+	echo "$(basename $0) <MB> <program>"
+	echo
+	echo "Limit Process (and its children) memory utilization to 500MiB of RAM"
+	echo "Example: $(basename $0) 500 sosreport"
+	echo
+	exit 0
+
+}
+
+checkTools
+
+rand_string=$(dd if=/dev/urandom bs=16 count=1 \
+	2> /dev/null | sha1sum | awk '{print $1}')
+
+
+
+arg1="$1"
+arg2="$2"
+
+case "$arg1" in
+	-h|--help|help)
+		printHelp
+		exit
+		;;
+esac
+
+for a in "$arg1" "$arg2"
+do
+	if [ -z "$a" ]; then
+		echo "No arguments provided. Check syntax."
+		echo
+		printHelp
+		exit
+	fi
+done
+
+allargs=()
+for i in "$@"
+do
+	allargs+=($i)
+done
+unset allargs[0]
+
+setCGroupAndRun $arg1
